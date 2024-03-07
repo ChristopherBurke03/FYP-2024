@@ -1,0 +1,1694 @@
+---
+title: "FYP Code"
+author: "Christopher Burke"
+date: "2024-02-28"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, include=FALSE}
+#Load Packages
+library(readr)
+library(dplyr)
+library(corrplot)
+library(ggplot2)
+library(caret)
+library(MASS)
+library(lmtest)
+library(tidyverse)
+library(broom)
+library(corrplot)
+library(PerformanceAnalytics)
+library(DynNom)
+```
+
+```{r, include=FALSE}
+#Input Data
+
+file_path_2014 <- "index2014_data.csv"
+data_2014 <- read_csv(file_path_2014)
+
+file_path_2015 <- "index2015_data.csv"
+data_2015 <- read_csv(file_path_2015)
+
+file_path_2016 <- "index2016_data.csv"
+data_2016 <- read_csv(file_path_2016)
+
+file_path <- "Combined 2014-2016.csv"
+data <- read_csv(file_path)
+```
+
+<!-- Set up the data -->
+
+```{r, include=FALSE}
+data_2014 <- data_2014[complete.cases(data_2014) & !apply(data_2014, 1, function(row) any(row == "N/A")), ]
+```
+
+```{r, include=FALSE}
+character_columns <- c("World Rank", "Region Rank", "2014 Score", "Change in Yearly Score",
+                       "Property Rights", "Change in Property Rights", "Freedom from Corruption",
+                       "Change in Freedom from Corruption", "Fiscal Freedom", "Change in Fiscal Freedom",
+                       "Gov't Spending", "Change in Gov't Spending", "Business Freedom", "Change in Business Freedom",
+                       "Labor Freedom", "Change in Labor Freedom", "Monetary Freedom", "Change in Monetary Freedom",
+                       "Trade Freedom", "Change in Trade Freedom", 
+                       "Investment Freedom", "Change in Investment Freedom", "Financial Freedom", "Change in Financial Freedom",
+                       "Tariff Rate (%)", "Income Tax Rate (%)", "Corporate Tax Rate (%)",
+                       "Tax Burden % of GDP", "Gov't Expenditure % of GDP", "GDP Growth Rate (%)", "5 Year GDP Growth Rate (%)", 
+                       "Unemployment (%)", "Inflation (%)", "Public Debt (% of GDP)", "Population (Millions)")
+
+# Use mutate_if to apply the conversion to specified columns
+data_2014 <- data_2014 %>%
+  mutate_if(names(.) %in% character_columns, as.numeric)
+```
+
+```{r, include=FALSE}
+data_2014$`GDP (Billions, PPP)` <- as.numeric(gsub("[\\$,]", "", data_2014$`GDP (Billions, PPP)`))
+data_2014$`GDP per Capita (PPP)` <- as.numeric(gsub("[\\$,]", "", data_2014$`GDP per Capita (PPP)`))
+data_2014$`FDI Inflow (Millions)` <- as.numeric(gsub("[\\$,]", "", data_2014$`FDI Inflow (Millions)`))
+```
+
+```{r, include=FALSE}
+#Log Data
+data_2014$log_GDP_per_Capita_PPP <- log(data_2014$`GDP per Capita (PPP)`)
+
+data_2014$log_Tariff <- log(data_2014$`Tariff Rate (%)`)
+data_2014$log_Income_Tax <- log(data_2014$`Income Tax Rate (%)`)
+data_2014$log_Corp_Tax <- log(data_2014$`Corporate Tax Rate (%)`)
+data_2014$log_Tax_Burden <- log(data_2014$`Tax Burden % of GDP`)
+data_2014$log_Expenditure_to_GDP <- log(data_2014$`Gov't Expenditure % of GDP`)
+data_2014$log_Public_Debt_to_GDP <- log(data_2014$`Public Debt (% of GDP)`)
+
+data_2014$log_Property <- log(data_2014$`Property Rights`)
+data_2014$log_Corruption <- log(data_2014$`Freedom from Corruption`)
+data_2014$log_Fiscal <- log(data_2014$`Fiscal Freedom`)
+data_2014$log_Business <- log(data_2014$`Business Freedom`)
+data_2014$log_Labor <- log(data_2014$`Labor Freedom`)
+data_2014$log_Monetary <- log(data_2014$`Monetary Freedom`)
+data_2014$log_Trade <- log(data_2014$`Trade Freedom`)
+data_2014$log_Investment <- log(data_2014$`Investment Freedom`)
+data_2014$log_Financial <- log(data_2014$`Financial Freedom`)
+```
+
+```{r, include=FALSE}
+data_2014 <- data_2014 %>% filter(!is.infinite(log_Tariff), !is.infinite(log_GDP_per_Capita_PPP)
+                        ,!is.infinite(log_Income_Tax), !is.infinite(log_Corp_Tax)
+                        ,!is.infinite(log_Tax_Burden), !is.infinite(log_Expenditure_to_GDP)
+                        ,!is.infinite(log_Public_Debt_to_GDP),!is.infinite(log_Property)
+                        ,!is.infinite(log_Corruption),!is.infinite(log_Fiscal)
+                        ,!is.infinite(log_Business),!is.infinite(log_Labor)
+                        ,!is.infinite(log_Monetary),!is.infinite(log_Trade)
+                        ,!is.infinite(log_Investment),!is.infinite(log_Financial))
+```
+
+
+```{r, include=FALSE}
+#Renaming datacolumns
+data_2014 <- data_2014 %>%
+  rename(GDP.per.capita = `GDP per Capita (PPP)`
+         , Tariff = `Tariff Rate (%)`
+         , Income.Tax = `Income Tax Rate (%)`
+         , Corporate = `Corporate Tax Rate (%)`
+         , Tax.Burden = `Tax Burden % of GDP`
+         , Gov.Exp = `Gov't Expenditure % of GDP`
+         , Public.Debt = `Public Debt (% of GDP)`
+         , Property.Rights = `Property Rights`
+         , Corruption.freedom = `Freedom from Corruption`
+         , Fiscal.Freedom = `Fiscal Freedom`
+         , Business.Freedom = `Business Freedom`
+         , Labor.Freedom = `Labor Freedom`
+         , Monetary.Freedom = `Monetary Freedom`
+         , Trade.Freedom = `Trade Freedom`
+         , Investment.Freedom = `Investment Freedom`
+         , Financial.Freedom = `Financial Freedom`)
+```
+
+
+
+```{r, include=FALSE}
+data_2015 <- data_2015[complete.cases(data_2015) & !apply(data_2015, 1, function(row) any(row == "N/A")), ]
+```
+
+```{r, include=FALSE}
+# Changing falsly characterised columns
+character_columns <- c("World Rank", "Region Rank", "2015 Score", "Change in Yearly Score",
+                       "Property Rights", "Change in Property Rights", "Freedom from Corruption",
+                       "Change in Freedom from Corruption", "Fiscal Freedom", "Change in Fiscal Freedom",
+                       "Gov't Spending", "Change in Gov't Spending", "Business Freedom", "Change in Business Freedom",
+                       "Labor Freedom", "Change in Labor Freedom", "Monetary Freedom", "Change in Monetary Freedom",
+                       "Trade Freedom", "Change in Trade Freedom", 
+                       "Investment Freedom", "Change in Investment Freedom", "Financial Freedom", "Change in Financial Freedom",
+                       "Tariff Rate (%)", "Income Tax Rate (%)", "Corporate Tax Rate (%)",
+                       "Tax Burden % of GDP", "Gov't Expenditure % of GDP", "GDP Growth Rate (%)", "5 Year GDP Growth Rate (%)", 
+                       "Unemployment (%)", "Inflation (%)", "Public Debt (% of GDP)", "Population (Millions)")
+
+data_2015 <- data_2015 %>%
+  mutate_if(names(.) %in% character_columns, as.numeric)
+
+```
+
+```{r, include=FALSE}
+data_2015$`GDP (Billions, PPP)` <- as.numeric(gsub("[\\$,]", "", data_2015$`GDP (Billions, PPP)`))
+data_2015$`GDP per Capita (PPP)` <- as.numeric(gsub("[\\$,]", "", data_2015$`GDP per Capita (PPP)`))
+data_2015$`FDI Inflow (Millions)` <- as.numeric(gsub("[\\$,]", "", data_2015$`FDI Inflow (Millions)`))
+```
+
+```{r, include=FALSE}
+#Log Data
+data_2015$log_GDP_per_Capita_PPP <- log(data_2015$`GDP per Capita (PPP)`)
+
+data_2015$log_Tariff <- log(data_2015$`Tariff Rate (%)`)
+data_2015$log_Income_Tax <- log(data_2015$`Income Tax Rate (%)`)
+data_2015$log_Corp_Tax <- log(data_2015$`Corporate Tax Rate (%)`)
+data_2015$log_Tax_Burden <- log(data_2015$`Tax Burden % of GDP`)
+data_2015$log_Expenditure_to_GDP <- log(data_2015$`Gov't Expenditure % of GDP`)
+data_2015$log_Public_Debt_to_GDP <- log(data_2015$`Public Debt (% of GDP)`)
+
+data_2015$log_Property <- log(data_2015$`Property Rights`)
+data_2015$log_Corruption <- log(data_2015$`Freedom from Corruption`)
+data_2015$log_Fiscal <- log(data_2015$`Fiscal Freedom`)
+data_2015$log_Business <- log(data_2015$`Business Freedom`)
+data_2015$log_Labor <- log(data_2015$`Labor Freedom`)
+data_2015$log_Monetary <- log(data_2015$`Monetary Freedom`)
+data_2015$log_Trade <- log(data_2015$`Trade Freedom`)
+data_2015$log_Investment <- log(data_2015$`Investment Freedom`)
+data_2015$log_Financial <- log(data_2015$`Financial Freedom`)
+```
+
+```{r, include=FALSE}
+data_2015 <- data_2015 %>% filter(!is.infinite(log_Tariff), !is.infinite(log_GDP_per_Capita_PPP)
+                        ,!is.infinite(log_Income_Tax), !is.infinite(log_Corp_Tax)
+                        ,!is.infinite(log_Tax_Burden), !is.infinite(log_Expenditure_to_GDP)
+                        ,!is.infinite(log_Public_Debt_to_GDP),!is.infinite(log_Property)
+                        ,!is.infinite(log_Corruption),!is.infinite(log_Fiscal)
+                        ,!is.infinite(log_Business),!is.infinite(log_Labor)
+                        ,!is.infinite(log_Monetary),!is.infinite(log_Trade)
+                        ,!is.infinite(log_Investment),!is.infinite(log_Financial))
+```
+
+
+```{r, include=FALSE}
+#Renaming datacolumns
+data_2015 <- data_2015 %>%
+  rename(GDP.per.capita = `GDP per Capita (PPP)`
+         , Tariff = `Tariff Rate (%)`
+         , Income.Tax = `Income Tax Rate (%)`
+         , Corporate = `Corporate Tax Rate (%)`
+         , Tax.Burden = `Tax Burden % of GDP`
+         , Gov.Exp = `Gov't Expenditure % of GDP`
+         , Public.Debt = `Public Debt (% of GDP)`
+         , Property.Rights = `Property Rights`
+         , Corruption.freedom = `Freedom from Corruption`
+         , Fiscal.Freedom = `Fiscal Freedom`
+         , Business.Freedom = `Business Freedom`
+         , Labor.Freedom = `Labor Freedom`
+         , Monetary.Freedom = `Monetary Freedom`
+         , Trade.Freedom = `Trade Freedom`
+         , Investment.Freedom = `Investment Freedom`
+         , Financial.Freedom = `Financial Freedom`)
+```
+
+
+```{r, include=FALSE}
+data_2016 <- data_2016[complete.cases(data_2016) & !apply(data_2016, 1, function(row) any(row == "N/A")), ]
+```
+
+```{r, include=FALSE}
+# Changing falsly characterised columns
+character_columns <- c("World Rank", "Region Rank", "2016 Score", "Change in Yearly Score",
+                       "Property Rights", "Change in Property Rights", "Freedom from Corruption",
+                       "Change in Freedom from Corruption", "Fiscal Freedom", "Change in Fiscal Freedom",
+                       "Gov't Spending", "Change in Gov't Spending", "Business Freedom", "Change in Business Freedom",
+                       "Labor Freedom", "Change in Labor Freedom", "Monetary Freedom", "Change in Monetary Freedom",
+                       "Trade Freedom", "Change in Trade Freedom", 
+                       "Investment Freedom", "Change in Investment Freedom", "Financial Freedom", "Change in Financial Freedom",
+                       "Tariff Rate (%)", "Income Tax Rate (%)", "Corporate Tax Rate (%)",
+                       "Tax Burden % of GDP", "Gov't Expenditure % of GDP", "GDP Growth Rate (%)", "5 Year GDP Growth Rate (%)", 
+                       "Unemployment (%)", "Inflation (%)", "Public Debt (% of GDP)", "Population (Millions)")
+
+data_2016 <- data_2016 %>%
+  mutate_if(names(.) %in% character_columns, as.numeric)
+```
+
+```{r, include=FALSE}
+data_2016$`GDP (Billions, PPP)` <- as.numeric(gsub("[\\$,]", "", data_2016$`GDP (Billions, PPP)`))
+data_2016$`GDP per Capita (PPP)` <- as.numeric(gsub("[\\$,]", "", data_2016$`GDP per Capita (PPP)`))
+data_2016$`FDI Inflow (Millions)` <- as.numeric(gsub("[\\$,]", "", data_2016$`FDI Inflow (Millions)`))
+```
+
+```{r, include=FALSE}
+#Log Data
+data_2016$log_GDP_per_Capita_PPP <- log(data_2016$`GDP per Capita (PPP)`)
+
+data_2016$log_Tariff <- log(data_2016$`Tariff Rate (%)`)
+data_2016$log_Income_Tax <- log(data_2016$`Income Tax Rate (%)`)
+data_2016$log_Corp_Tax <- log(data_2016$`Corporate Tax Rate (%)`)
+data_2016$log_Tax_Burden <- log(data_2016$`Tax Burden % of GDP`)
+data_2016$log_Expenditure_to_GDP <- log(data_2016$`Gov't Expenditure % of GDP`)
+data_2016$log_Public_Debt_to_GDP <- log(data_2016$`Public Debt (% of GDP)`)
+
+data_2016$log_Property <- log(data_2016$`Property Rights`)
+data_2016$log_Corruption <- log(data_2016$`Freedom from Corruption`)
+data_2016$log_Fiscal <- log(data_2016$`Fiscal Freedom`)
+data_2016$log_Business <- log(data_2016$`Business Freedom`)
+data_2016$log_Labor <- log(data_2016$`Labor Freedom`)
+data_2016$log_Monetary <- log(data_2016$`Monetary Freedom`)
+data_2016$log_Trade <- log(data_2016$`Trade Freedom`)
+data_2016$log_Investment <- log(data_2016$`Investment Freedom`)
+data_2016$log_Financial <- log(data_2016$`Financial Freedom`)
+```
+
+```{r, include=FALSE}
+data_2016 <- data_2016 %>% filter(!is.infinite(log_Tariff), !is.infinite(log_GDP_per_Capita_PPP)
+                        ,!is.infinite(log_Income_Tax), !is.infinite(log_Corp_Tax)
+                        ,!is.infinite(log_Tax_Burden), !is.infinite(log_Expenditure_to_GDP)
+                        ,!is.infinite(log_Public_Debt_to_GDP),!is.infinite(log_Property)
+                        ,!is.infinite(log_Corruption),!is.infinite(log_Fiscal)
+                        ,!is.infinite(log_Business),!is.infinite(log_Labor)
+                        ,!is.infinite(log_Monetary),!is.infinite(log_Trade)
+                        ,!is.infinite(log_Investment),!is.infinite(log_Financial))
+```
+
+
+```{r, include=FALSE}
+#Renaming datacolumns
+data_2016 <- data_2016 %>%
+  rename(GDP.per.capita = `GDP per Capita (PPP)`
+         , Tariff = `Tariff Rate (%)`
+         , Income.Tax = `Income Tax Rate (%)`
+         , Corporate = `Corporate Tax Rate (%)`
+         , Tax.Burden = `Tax Burden % of GDP`
+         , Gov.Exp = `Gov't Expenditure % of GDP`
+         , Public.Debt = `Public Debt (% of GDP)`
+         , Property.Rights = `Property Rights`
+         , Corruption.freedom = `Freedom from Corruption`
+         , Fiscal.Freedom = `Fiscal Freedom`
+         , Business.Freedom = `Business Freedom`
+         , Labor.Freedom = `Labor Freedom`
+         , Monetary.Freedom = `Monetary Freedom`
+         , Trade.Freedom = `Trade Freedom`
+         , Investment.Freedom = `Investment Freedom`
+         , Financial.Freedom = `Financial Freedom`)
+```
+
+
+```{r, include=FALSE}
+data <- data[complete.cases(data) & !apply(data, 1, function(row) any(row == "N/A")), ]
+```
+
+
+
+```{r, include=FALSE}
+# Changing falsly characterised columns
+character_columns <- c("World Rank", "Region Rank", "2013 Score", "Change in Yearly Score",
+                       "Property Rights", "Change in Property Rights", "Freedom from Corruption",
+                       "Change in Freedom from Corruption", "Fiscal Freedom", "Change in Fiscal Freedom",
+                       "Gov't Spending", "Change in Gov't Spending", "Business Freedom", "Change in Business Freedom",
+                       "Labor Freedom", "Change in Labor Freedom", "Monetary Freedom", "Change in Monetary Freedom",
+                       "Trade Freedom", "Change in Trade Freedom", 
+                       "Investment Freedom", "Change in Investment Freedom", "Financial Freedom", "Change in Financial Freedom",
+                       "Tariff Rate (%)", "Income Tax Rate (%)", "Corporate Tax Rate (%)",
+                       "Tax Burden % of GDP", "Gov't Expenditure % of GDP", "GDP Growth Rate (%)", "5 Year GDP Growth Rate (%)", 
+                       "Unemployment (%)", "Inflation (%)", "Public Debt (% of GDP)", "Population (Millions)")
+
+for (col in character_columns) {
+  # Use a temporary vector for conversion to handle non-convertible values
+  temp_vector <- as.numeric(data[[col]])
+  
+  # Check for NAs or non-convertible values
+  if (any(is.na(temp_vector)) || any(is.nan(temp_vector))) {
+    warning(paste("Column", col, "contains non-numeric or missing values. Setting to NA."))
+    temp_vector <- NA
+  }
+  
+  # Assign the converted values back to the data frame
+  data[[col]] <- temp_vector
+}
+
+```
+
+```{r, include=FALSE}
+data$`GDP (Billions, PPP)` <- as.numeric(gsub("[\\$,]", "", data$`GDP (Billions, PPP)`))
+data$`GDP per Capita (PPP)` <- as.numeric(gsub("[\\$,]", "", data$`GDP per Capita (PPP)`))
+data$`FDI Inflow (Millions)` <- as.numeric(gsub("[\\$,]", "", data$`FDI Inflow (Millions)`))
+```
+
+```{r, include=FALSE}
+#Log Data
+data$log_GDP_per_Capita_PPP <- log(data$`GDP per Capita (PPP)`)
+
+data$log_Tariff <- log(data$`Tariff Rate (%)`)
+data$log_Income_Tax <- log(data$`Income Tax Rate (%)`)
+data$log_Corp_Tax <- log(data$`Corporate Tax Rate (%)`)
+data$log_Tax_Burden <- log(data$`Tax Burden % of GDP`)
+data$log_Expenditure_to_GDP <- log(data$`Gov't Expenditure % of GDP`)
+data$log_Public_Debt_to_GDP <- log(data$`Public Debt (% of GDP)`)
+
+data$log_Property <- log(data$`Property Rights`)
+data$log_Corruption <- log(data$`Freedom from Corruption`)
+data$log_Fiscal <- log(data$`Fiscal Freedom`)
+data$log_Business <- log(data$`Business Freedom`)
+data$log_Labor <- log(data$`Labor Freedom`)
+data$log_Monetary <- log(data$`Monetary Freedom`)
+data$log_Trade <- log(data$`Trade Freedom`)
+data$log_Investment <- log(data$`Investment Freedom`)
+data$log_Financial <- log(data$`Financial Freedom`)
+```
+
+```{r, include=FALSE}
+data <- data %>% filter(!is.infinite(log_Tariff), !is.infinite(log_GDP_per_Capita_PPP)
+                        ,!is.infinite(log_Income_Tax), !is.infinite(log_Corp_Tax)
+                        ,!is.infinite(log_Tax_Burden), !is.infinite(log_Expenditure_to_GDP)
+                        ,!is.infinite(log_Public_Debt_to_GDP),!is.infinite(log_Property)
+                        ,!is.infinite(log_Corruption),!is.infinite(log_Fiscal)
+                        ,!is.infinite(log_Business),!is.infinite(log_Labor)
+                        ,!is.infinite(log_Monetary),!is.infinite(log_Trade)
+                        ,!is.infinite(log_Investment),!is.infinite(log_Financial))
+```
+
+
+```{r, include=FALSE}
+#Renaming datacolumns
+data <- data %>%
+  rename(GDP.per.capita = `GDP per Capita (PPP)`
+         , Tariff = `Tariff Rate (%)`
+         , Income.Tax = `Income Tax Rate (%)`
+         , Corporate = `Corporate Tax Rate (%)`
+         , Tax.Burden = `Tax Burden % of GDP`
+         , Gov.Exp = `Gov't Expenditure % of GDP`
+         , Public.Debt = `Public Debt (% of GDP)`
+         , Property.Rights = `Property Rights`
+         , Corruption.freedom = `Freedom from Corruption`
+         , Fiscal.Freedom = `Fiscal Freedom`
+         , Business.Freedom = `Business Freedom`
+         , Labor.Freedom = `Labor Freedom`
+         , Monetary.Freedom = `Monetary Freedom`
+         , Trade.Freedom = `Trade Freedom`
+         , Investment.Freedom = `Investment Freedom`
+         , Financial.Freedom = `Financial Freedom`)
+```
+
+
+<!-- Data Setup done -->
+
+```{r}
+data_Tax_2014 <- data_2014[, c( "Tariff", "Income.Tax", "Corporate", "Tax.Burden", "Gov.Exp", "Public.Debt"
+)]
+```
+
+```{r}
+hist(data_Tax_2014)
+```
+
+```{r}
+data_Freedom_2014 <- data_2014[, c( "Property.Rights", "Corruption.freedom", "Fiscal.Freedom", "Business.Freedom", "Labor.Freedom", "Monetary.Freedom", "Trade.Freedom", "Investment.Freedom", "Financial.Freedom"
+)]
+```
+
+```{r}
+hist(data_Freedom_2014)
+```
+
+
+```{r, include=FALSE}
+Preliminary_model <- lm(GDP.per.capita ~ (Tariff + Income.Tax 
+                 + Corporate + Tax.Burden + Gov.Exp
+                 + Public.Debt + log_Tariff + log_Income_Tax + log_Corp_Tax 
+                 + log_Tax_Burden + log_Expenditure_to_GDP + log_Public_Debt_to_GDP
+                 
+                 +Property.Rights + Corruption.freedom
+                    + Fiscal.Freedom + Business.Freedom + Labor.Freedom
+                    + Monetary.Freedom + Trade.Freedom + Investment.Freedom
+                    + Financial.Freedom
+                    + log_Property + log_Corruption + log_Fiscal + log_Business + log_Labor
+                    + log_Monetary + log_Trade + log_Investment + log_Financial)
+                    , data = data)
+```
+
+
+
+**BoxCox Transformation**
+
+```{r, echo=FALSE}
+boxcox_results <- boxcox(Preliminary_model)
+
+# Access the optimal lambda
+optimal_lambda <- boxcox_results$x[which.max(boxcox_results$y)]
+```
+
+```{r, echo=FALSE}
+cat("optimal lambda for model", optimal_lambda, "\n")
+```
+Round lambda to 0.4
+
+```{r, echo=FALSE}
+#Rename optimal lambda to round figure in 95% CI:
+optimal_lambda <- 0.4
+```
+
+```{r, include=FALSE}
+# Transform the response variable 'GDP per Capita (PPP)'
+transformed_GDP <- if (abs(optimal_lambda) > 0.001) {
+  ((data$GDP.per.capita ^ optimal_lambda) - 1) / optimal_lambda
+} else {
+  log(data$GDP.per.capita)
+}
+
+```
+
+
+```{r, include=FALSE}
+model_box_cox <- lm(transformed_GDP ~ (Tariff + Income.Tax 
+                 + Corporate + Tax.Burden + Gov.Exp
+                 + Public.Debt + log_Tariff + log_Income_Tax + log_Corp_Tax 
+                 + log_Tax_Burden + log_Expenditure_to_GDP + log_Public_Debt_to_GDP
+                 
+                 +Property.Rights + Corruption.freedom
+                    + Fiscal.Freedom + Business.Freedom + Labor.Freedom
+                    + Monetary.Freedom + Trade.Freedom + Investment.Freedom
+                    + Financial.Freedom
+                    + log_Property + log_Corruption + log_Fiscal + log_Business + log_Labor
+                    + log_Monetary + log_Trade + log_Investment + log_Financial)
+                    , data = data)
+```
+
+```{r}
+transformed_square_root <- sqrt(data$GDP.per.capita)
+```
+
+```{r}
+model_square_root <- lm(transformed_square_root ~ (Tariff + Income.Tax 
+                 + Corporate + Tax.Burden + Gov.Exp
+                 + Public.Debt + log_Tariff + log_Income_Tax + log_Corp_Tax 
+                 + log_Tax_Burden + log_Expenditure_to_GDP + log_Public_Debt_to_GDP
+                 
+                 +Property.Rights + Corruption.freedom
+                    + Fiscal.Freedom + Business.Freedom + Labor.Freedom
+                    + Monetary.Freedom + Trade.Freedom + Investment.Freedom
+                    + Financial.Freedom
+                    + log_Property + log_Corruption + log_Fiscal + log_Business + log_Labor
+                    + log_Monetary + log_Trade + log_Investment + log_Financial)
+                    , data = data)
+```
+
+```{r}
+log_transformed <- log(data$GDP.per.capita)
+```
+
+```{r}
+model_log <- lm(log_transformed ~ (Tariff + Income.Tax 
+                 + Corporate + Tax.Burden + Gov.Exp
+                 + Public.Debt + log_Tariff + log_Income_Tax + log_Corp_Tax 
+                 + log_Tax_Burden + log_Expenditure_to_GDP + log_Public_Debt_to_GDP
+                 
+                 +Property.Rights + Corruption.freedom
+                    + Fiscal.Freedom + Business.Freedom + Labor.Freedom
+                    + Monetary.Freedom + Trade.Freedom + Investment.Freedom
+                    + Financial.Freedom
+                    + log_Property + log_Corruption + log_Fiscal + log_Business + log_Labor
+                    + log_Monetary + log_Trade + log_Investment + log_Financial)
+                    , data = data)
+```
+
+
+
+Compare models before and after transformation
+
+Model Before transformation
+
+
+
+
+```{r}
+# Assuming you have residuals from Model 1 and Model 2
+residuals_model1 <- resid(Preliminary_model)
+residuals_model2 <- resid(model_box_cox)
+residuals_model3 <- resid(model_square_root)
+residuals_model4 <- resid(model_log)
+
+# Create QQ plots
+par(mfrow = c(2, 2))  # Set up a 1x2 grid for side-by-side plots
+
+# QQ plot for Model 1
+qqnorm(residuals_model1, main = "QQ Plot - Untransformed Model")
+qqline(residuals_model1)
+
+# QQ plot for Model 2
+qqnorm(residuals_model2, main = "QQ Plot - Box Cox Model")
+qqline(residuals_model2)
+
+# QQ plot for Model 2
+qqnorm(residuals_model3, main = "QQ Plot - Square Root Model")
+qqline(residuals_model3)
+
+# QQ plot for Model 2
+qqnorm(residuals_model3, main = "QQ Plot - Log Model")
+qqline(residuals_model3)
+
+# Reset the plotting parameters
+par(mfrow = c(2, 2))
+```
+
+```{r, include=FALSE}
+# Transform the response variable 'GDP per Capita (PPP)'
+
+transformed_GDP_2014 <- if (abs(optimal_lambda) > 0.001) {
+  ((data_2014$GDP.per.capita ^ optimal_lambda) - 1) / optimal_lambda
+} else {
+  log(data_2014$GDP.per.capita)
+}
+
+transformed_GDP_2015 <- if (abs(optimal_lambda) > 0.001) {
+  ((data_2015$GDP.per.capita ^ optimal_lambda) - 1) / optimal_lambda
+} else {
+  log(data_2015$GDP.per.capita)
+}
+
+transformed_GDP_2016 <- if (abs(optimal_lambda) > 0.001) {
+  ((data_2016$GDP.per.capita ^ optimal_lambda) - 1) / optimal_lambda
+} else {
+  log(data_2016$GDP.per.capita)
+}
+```
+
+```{r, include=FALSE}
+data_2014$transformed_GDP_2014 <- c(transformed_GDP_2014)
+data_2015$transformed_GDP_2015 <- c(transformed_GDP_2015)
+data_2016$transformed_GDP_2016 <- c(transformed_GDP_2016)
+data$transformed_GDP <- c(transformed_GDP)
+```
+
+```{r}
+x = data$Corruption.freedom
+y = data$transformed_GDP
+
+# Create scatterplot
+plot(x, y, main = "Relationship of Freedom from Corruption and Transformed GDP", xlab = "Freedom from Corruption", ylab = "Transformed GDP")
+
+# Add correlation line
+correlation <- cor(x, y)
+abline(lm(y ~ x), col = "red", lwd = 2)
+
+# Create legend with correlation coefficient
+legend("topleft", legend = paste("Correlation:", round(correlation, 2)), col = "red", lty = 1, cex = 0.8)
+```
+
+
+```{r, echo=FALSE}
+# Fit linear models
+model_2014 <- lm(transformed_GDP_2014 ~ Investment.Freedom, data = data_2014)
+model_2015 <- lm(transformed_GDP_2015 ~ Investment.Freedom, data = data_2015)
+model_2016 <- lm(transformed_GDP_2016 ~ Investment.Freedom, data = data_2016)
+
+# Extract confidence intervals
+ci_2014 <- confint(model_2014, level = 0.95)
+ci_2015 <- confint(model_2015, level = 0.95)
+ci_2016 <- confint(model_2016, level = 0.95)
+
+# Create a data frame for visualization
+ci_data <- data.frame(
+  Year = c(rep("2014", nrow(ci_2014)), rep("2015", nrow(ci_2015)), rep("2016", nrow(ci_2016))),
+  Investment_Freedom_CI = c(ci_2014["Investment.Freedom", ], ci_2015["Investment.Freedom", ], ci_2016["Investment.Freedom", ])
+)
+
+# Convert the data to numeric (if needed)
+ci_data$Investment_Freedom_CI <- as.numeric(ci_data$Investment_Freedom_CI)
+
+boxplot_colors <- c("lightblue", "lightgreen", "lightcoral")
+
+# Visualize using boxplot with color
+boxplot(Investment_Freedom_CI ~ Year, data = ci_data, main = "Coefficient of Investment Freedom by Year",
+        ylab = "Investment Freedom", xlab = "Year", col = boxplot_colors)
+```
+
+```{r, echo=FALSE}
+# Fit linear models
+model_2014 <- lm(transformed_GDP_2014 ~ Tax.Burden, data = data_2014)
+model_2015 <- lm(transformed_GDP_2015 ~ Tax.Burden, data = data_2015)
+model_2016 <- lm(transformed_GDP_2016 ~ Tax.Burden, data = data_2016)
+
+# Extract confidence intervals
+ci_2014 <- confint(model_2014, level = 0.95)
+ci_2015 <- confint(model_2015, level = 0.95)
+ci_2016 <- confint(model_2016, level = 0.95)
+
+# Create a data frame for visualization
+ci_data <- data.frame(
+  Year = c(rep("2014", nrow(ci_2014)), rep("2015", nrow(ci_2015)), rep("2016", nrow(ci_2016))),
+  Tax_Burden_CI = c(ci_2014["Tax.Burden", ], ci_2015["Tax.Burden", ], ci_2016["Tax.Burden", ])
+)
+
+# Convert the data to numeric (if needed)
+ci_data$Tax_Burden_CI <- as.numeric(ci_data$Tax_Burden_CI)
+
+boxplot_colors <- c("lightblue", "lightgreen", "lightcoral")
+
+# Visualize using boxplot with color
+boxplot(Tax_Burden_CI ~ Year, data = ci_data, main = "Coefficient of Tax Burden by Year",
+        ylab = "Tax Burden", xlab = "Year", col = boxplot_colors)
+```
+
+```{r, echo=FALSE}
+# Fit linear models
+model_2014 <- lm(transformed_GDP_2014 ~ log_Tax_Burden, data = data_2014)
+model_2015 <- lm(transformed_GDP_2015 ~ log_Tax_Burden, data = data_2015)
+model_2016 <- lm(transformed_GDP_2016 ~ log_Tax_Burden, data = data_2016)
+
+# Extract confidence intervals
+ci_2014 <- confint(model_2014, level = 0.95)
+ci_2015 <- confint(model_2015, level = 0.95)
+ci_2016 <- confint(model_2016, level = 0.95)
+
+# Create a data frame for visualization
+ci_data <- data.frame(
+  Year = c(rep("2014", nrow(ci_2014)), rep("2015", nrow(ci_2015)), rep("2016", nrow(ci_2016))),
+  Log_Tax_Burden_CI = c(ci_2014["log_Tax_Burden", ], ci_2015["log_Tax_Burden", ], ci_2016["log_Tax_Burden", ])
+)
+
+# Convert the data to numeric (if needed)
+ci_data$Log_Tax_Burden_CI <- as.numeric(ci_data$Log_Tax_Burden_CI)
+
+boxplot_colors <- c("lightblue", "lightgreen", "lightcoral")
+
+# Visualize using boxplot with color
+boxplot(Log_Tax_Burden_CI ~ Year, data = ci_data, main = "Coefficient of log Tax Burden by Year",
+        ylab = "Log Tax Burden", xlab = "Year", col = boxplot_colors)
+```
+
+```{r, echo=FALSE}
+# Fit linear models
+model_2014 <- lm(transformed_GDP_2014 ~ Gov.Exp, data = data_2014)
+model_2015 <- lm(transformed_GDP_2015 ~ Gov.Exp, data = data_2015)
+model_2016 <- lm(transformed_GDP_2016 ~ Gov.Exp, data = data_2016)
+
+# Extract confidence intervals
+ci_2014 <- confint(model_2014, level = 0.95)
+ci_2015 <- confint(model_2015, level = 0.95)
+ci_2016 <- confint(model_2016, level = 0.95)
+
+# Create a data frame for visualization
+ci_data <- data.frame(
+  Year = c(rep("2014", nrow(ci_2014)), rep("2015", nrow(ci_2015)), rep("2016", nrow(ci_2016))),
+  Gov_Exp_CI = c(ci_2014["Gov.Exp", ], ci_2015["Gov.Exp", ], ci_2016["Gov.Exp", ])
+)
+
+# Convert the data to numeric (if needed)
+ci_data$Gov_Exp_CI <- as.numeric(ci_data$Gov_Exp_CI)
+
+boxplot_colors <- c("lightblue", "lightgreen", "lightcoral")
+
+# Visualize using boxplot with color
+boxplot(Gov_Exp_CI ~ Year, data = ci_data, main = "Coefficient of Government Expenditure to GDP by Year",
+        ylab = "Government Expenditure", xlab = "Year", col = boxplot_colors)
+```
+
+```{r, echo=FALSE}
+# Fit linear models
+model_2014 <- lm(transformed_GDP_2014 ~ log_Expenditure_to_GDP, data = data_2014)
+model_2015 <- lm(transformed_GDP_2015 ~ log_Expenditure_to_GDP, data = data_2015)
+model_2016 <- lm(transformed_GDP_2016 ~ log_Expenditure_to_GDP, data = data_2016)
+
+# Extract confidence intervals
+ci_2014 <- confint(model_2014, level = 0.95)
+ci_2015 <- confint(model_2015, level = 0.95)
+ci_2016 <- confint(model_2016, level = 0.95)
+
+# Create a data frame for visualization
+ci_data <- data.frame(
+  Year = c(rep("2014", nrow(ci_2014)), rep("2015", nrow(ci_2015)), rep("2016", nrow(ci_2016))),
+  Log_Gov_Exp_CI = c(ci_2014["log_Expenditure_to_GDP", ], ci_2015["log_Expenditure_to_GDP", ], ci_2016["log_Expenditure_to_GDP", ])
+)
+
+# Convert the data to numeric (if needed)
+ci_data$Log_Gov_Exp_CI <- as.numeric(ci_data$Log_Gov_Exp_CI)
+
+boxplot_colors <- c("lightblue", "lightgreen", "lightcoral")
+
+# Visualize using boxplot with color
+boxplot(Log_Gov_Exp_CI ~ Year, data = ci_data, main = "Coefficient of Log of Gov Exp to GDP by Year",
+        ylab = "Log of Gov Exp to GDP", xlab = "Year", col = boxplot_colors)
+```
+
+
+
+
+```{r, echo=FALSE}
+# Fit linear models
+model_2014 <- lm(transformed_GDP_2014 ~ Financial.Freedom , data = data_2014)
+model_2015 <- lm(transformed_GDP_2015 ~ Financial.Freedom , data = data_2015)
+model_2016 <- lm(transformed_GDP_2016 ~ Financial.Freedom , data = data_2016)
+
+# Extract confidence intervals
+ci_2014 <- confint(model_2014, level = 0.95)
+ci_2015 <- confint(model_2015, level = 0.95)
+ci_2016 <- confint(model_2016, level = 0.95)
+
+# Create a data frame for visualization
+ci_data <- data.frame(
+  Year = c(rep("2014", nrow(ci_2014)), rep("2015", nrow(ci_2015)), rep("2016", nrow(ci_2016))),
+  Financial.Freedom_CI = c(ci_2014["Financial.Freedom", ], ci_2015["Financial.Freedom", ], ci_2016["Financial.Freedom", ])
+)
+
+# Convert the data to numeric (if needed)
+ci_data$Financial.Freedom_CI <- as.numeric(ci_data$Financial.Freedom_CI)
+
+boxplot_colors <- c("lightblue", "lightgreen", "lightcoral")
+
+# Visualize using boxplot with color
+boxplot(Financial.Freedom_CI ~ Year, data = ci_data, main = "Coefficient of Financial freedom by Year",
+        ylab = "Log of Financial Freedom", xlab = "Year", col = boxplot_colors)
+```
+
+```{r, echo=FALSE}
+# Fit linear models
+model_2014 <- lm(transformed_GDP_2014 ~ Property.Rights , data = data_2014)
+model_2015 <- lm(transformed_GDP_2015 ~ Property.Rights , data = data_2015)
+model_2016 <- lm(transformed_GDP_2016 ~ Property.Rights , data = data_2016)
+
+# Extract confidence intervals
+ci_2014 <- confint(model_2014, level = 0.95)
+ci_2015 <- confint(model_2015, level = 0.95)
+ci_2016 <- confint(model_2016, level = 0.95)
+
+# Create a data frame for visualization
+ci_data <- data.frame(
+  Year = c(rep("2014", nrow(ci_2014)), rep("2015", nrow(ci_2015)), rep("2016", nrow(ci_2016))),
+  Property.Rights_CI = c(ci_2014["Property.Rights", ], ci_2015["Property.Rights", ], ci_2016["Property.Rights", ])
+)
+
+# Convert the data to numeric (if needed)
+ci_data$Property.Rights_CI <- as.numeric(ci_data$Property.Rights_CI)
+
+boxplot_colors <- c("lightblue", "lightgreen", "lightcoral")
+
+# Visualize using boxplot with color
+boxplot(Property.Rights_CI ~ Year, data = ci_data, main = "Coefficient of Property Rights  by Year",
+        ylab = "Log of Property Rights", xlab = "Year", col = boxplot_colors)
+```
+
+```{r, echo=FALSE}
+# Fit linear models
+model_2014 <- lm(transformed_GDP_2014 ~ log_Property , data = data_2014)
+model_2015 <- lm(transformed_GDP_2015 ~ log_Property , data = data_2015)
+model_2016 <- lm(transformed_GDP_2016 ~ log_Property , data = data_2016)
+
+# Extract confidence intervals
+ci_2014 <- confint(model_2014, level = 0.95)
+ci_2015 <- confint(model_2015, level = 0.95)
+ci_2016 <- confint(model_2016, level = 0.95)
+
+# Create a data frame for visualization
+ci_data <- data.frame(
+  Year = c(rep("2014", nrow(ci_2014)), rep("2015", nrow(ci_2015)), rep("2016", nrow(ci_2016))),
+  log_Property_CI = c(ci_2014["log_Property", ], ci_2015["log_Property", ], ci_2016["log_Property", ])
+)
+
+# Convert the data to numeric (if needed)
+ci_data$log_Property_CI <- as.numeric(ci_data$log_Property_CI)
+
+boxplot_colors <- c("lightblue", "lightgreen", "lightcoral")
+
+# Visualize using boxplot with color
+boxplot(log_Property_CI ~ Year, data = ci_data, main = "Coefficient of Log of Property Rights by Year",
+        ylab = "Log of Property Rights", xlab = "Year", col = boxplot_colors)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+**Example of removed data variables**
+```{r, echo=FALSE}
+# Fit linear models
+model_2014 <- lm(transformed_GDP_2014 ~ Tariff, data = data_2014)
+model_2015 <- lm(transformed_GDP_2015 ~ Tariff, data = data_2015)
+model_2016 <- lm(transformed_GDP_2016 ~ Tariff, data = data_2016)
+
+# Extract confidence intervals
+ci_2014 <- confint(model_2014, level = 0.95)
+ci_2015 <- confint(model_2015, level = 0.95)
+ci_2016 <- confint(model_2016, level = 0.95)
+
+# Create a data frame for visualization
+ci_data <- data.frame(
+  Year = c(rep("2014", nrow(ci_2014)), rep("2015", nrow(ci_2015)), rep("2016", nrow(ci_2016))),
+  Tariff_CI = c(ci_2014["Tariff", ], ci_2015["Tariff", ], ci_2016["Tariff", ])
+)
+
+# Convert the data to numeric (if needed)
+ci_data$Tariff_CI <- as.numeric(ci_data$Tariff_CI)
+
+boxplot_colors <- c("lightblue", "lightgreen", "lightcoral")
+
+# Visualize using boxplot with color
+boxplot(Tariff_CI ~ Year, data = ci_data, main = "Coefficient of Tariff by Year",
+        ylab = "Tariff", xlab = "Year", col = boxplot_colors)
+```
+Coefficient of 2014 is not in 95% CI of 2015 or 2016. Tariff is not a stable variable
+
+```{r, echo=FALSE}
+# Fit linear models
+model_2014 <- lm(transformed_GDP_2014 ~ log_Income_Tax, data = data_2014)
+model_2015 <- lm(transformed_GDP_2015 ~ log_Income_Tax, data = data_2015)
+model_2016 <- lm(transformed_GDP_2016 ~ log_Income_Tax, data = data_2016)
+
+# Extract confidence intervals
+ci_2014 <- confint(model_2014, level = 0.95)
+ci_2015 <- confint(model_2015, level = 0.95)
+ci_2016 <- confint(model_2016, level = 0.95)
+
+# Create a data frame for visualization
+ci_data <- data.frame(
+  Year = c(rep("2014", nrow(ci_2014)), rep("2015", nrow(ci_2015)), rep("2016", nrow(ci_2016))),
+  log_Income_Tax_CI = c(ci_2014["log_Income_Tax", ], ci_2015["log_Income_Tax", ], ci_2016["log_Income_Tax", ])
+)
+
+# Convert the data to numeric (if needed)
+ci_data$log_Income_Tax_CI <- as.numeric(ci_data$log_Income_Tax_CI)
+
+boxplot_colors <- c("lightblue", "lightgreen", "lightcoral")
+
+# Visualize using boxplot with color
+boxplot(log_Income_Tax_CI ~ Year, data = ci_data, main = "Coefficient of Log of Income Tax by Year",
+        ylab = "Log of Income Tax", xlab = "Year", col = boxplot_colors)
+```
+While the coefficients for log of Income Tax is within the 95% confidence interval for all 3 years. It contains 0 in the 95% confidence interval in the years 2015 and 2016
+
+
+
+
+Variables that did not contain 0 and whose mean for all 3 models was in each years 95% CI
+
+```{r, include=FALSE}
+cleaned_2014 <- lm(transformed_GDP_2014 ~ 
+                     Income.Tax + Corporate + Tax.Burden + Gov.Exp + Public.Debt
+                   + log_Tax_Burden + log_Expenditure_to_GDP
+                   + Property.Rights + Labor.Freedom + Monetary.Freedom + Investment.Freedom + Financial.Freedom
+                   + log_Property + log_Corruption + log_Fiscal + log_Business + log_Labor + log_Investment + log_Financial
+                   , data = data_2014)
+
+cleaned_2015 <- lm(transformed_GDP_2015 ~ 
+                     Income.Tax + Corporate + Tax.Burden + Gov.Exp + Public.Debt
+                   + log_Tax_Burden + log_Expenditure_to_GDP
+                   + Property.Rights + Labor.Freedom + Monetary.Freedom + Investment.Freedom + Financial.Freedom
+                   + log_Property + log_Corruption + log_Fiscal + log_Business + log_Labor + log_Investment + log_Financial
+                   , data = data_2015)
+
+cleaned_2016 <- lm(transformed_GDP_2016 ~ 
+                     Income.Tax + Corporate + Tax.Burden + Gov.Exp + Public.Debt
+                   + log_Tax_Burden + log_Expenditure_to_GDP
+                   + Property.Rights + Labor.Freedom + Monetary.Freedom + Investment.Freedom + Financial.Freedom
+                   + log_Property + log_Corruption + log_Fiscal + log_Business + log_Labor + log_Investment + log_Financial
+                   , data = data_2016)
+```
+
+```{r, include=FALSE}
+step_cleaned_2014 <- step(cleaned_2014)
+
+step_cleaned_2015 <- step(cleaned_2015)
+
+step_cleaned_2016 <- step(cleaned_2016)
+```
+
+```{r, echo=FALSE}
+summary(step_cleaned_2014)
+summary(step_cleaned_2015)
+summary(step_cleaned_2016)
+```
+
+Variables in all 3 models :
+  Tax.Burden,
+  log_Tax_Burden,
+  log_Expenditure_to_GDP,
+  log_Business,
+  Property.Rights,
+  log_Property,
+  
+Variables in 2 of the models :
+  Gov.Exp (model 2014, model 2016),
+  Financial.Freedom (model 2015, model 2016)
+
+```{r, include=FALSE}
+cleaned2_2014 <- lm(transformed_GDP_2014 ~ 
+                   (Tax.Burden + log_Tax_Burden
+                    + Gov.Exp + log_Expenditure_to_GDP
+                    + log_Business + Financial.Freedom
+                    + Property.Rights + log_Property)^2
+                   , data = data_2014)
+
+cleaned2_2015 <- lm(transformed_GDP_2015 ~ 
+                   (Tax.Burden + log_Tax_Burden
+                    + Gov.Exp + log_Expenditure_to_GDP
+                    + log_Business + Financial.Freedom
+                    + Property.Rights + log_Property)^2
+                   , data = data_2015)
+
+cleaned2_2016 <- lm(transformed_GDP_2016 ~ 
+                   (Tax.Burden + log_Tax_Burden
+                    + Gov.Exp + log_Expenditure_to_GDP
+                    + log_Business + Financial.Freedom
+                    + Property.Rights + log_Property)^2
+                   , data = data_2016)
+```
+
+```{r, include=FALSE}
+step_cleaned2_2014 <- step(cleaned2_2014)
+
+step_cleaned2_2015 <- step(cleaned2_2015)
+
+step_cleaned2_2016 <- step(cleaned2_2016)
+```
+
+```{r, echo=FALSE}
+summary(step_cleaned2_2014)
+summary(step_cleaned2_2015)
+summary(step_cleaned2_2016)
+```
+
+Variables in all 3 :
+  Tax.Burden,
+  log_Tax_Burden,
+  log_Expenditure_to_GDP,
+  Property.Rights,
+  Financial.Freedom,
+  log_Property,
+  log_Business
+  
+
+```{r, include=FALSE}
+cleaned3_2014 <- lm(transformed_GDP_2014 ~ 
+              Tax.Burden
+               + log_Tax_Burden + log_Expenditure_to_GDP
+               + Property.Rights + Financial.Freedom
+               + log_Property + log_Business
+            
+            + Tax.Burden * (Gov.Exp + log_Expenditure_to_GDP + Property.Rights)
+            + Gov.Exp * log_Tax_Burden
+            + log_Tax_Burden * log_Expenditure_to_GDP
+            + log_Expenditure_to_GDP * log_Property
+            
+            , data = data_2014)
+
+cleaned3_2015 <- lm(transformed_GDP_2015 ~ 
+              Tax.Burden
+               + log_Tax_Burden + log_Expenditure_to_GDP
+               + Property.Rights + Financial.Freedom
+               + log_Property + log_Business
+            
+            + Tax.Burden * (Gov.Exp + log_Expenditure_to_GDP + Property.Rights)
+            + Gov.Exp * log_Tax_Burden
+            + log_Tax_Burden * log_Expenditure_to_GDP
+            + log_Expenditure_to_GDP * log_Property
+            
+            , data = data_2015)
+
+cleaned3_2016 <- lm(transformed_GDP_2016 ~ 
+              Tax.Burden
+               + log_Tax_Burden + log_Expenditure_to_GDP
+               + Property.Rights + Financial.Freedom
+               + log_Property + log_Business
+            
+            + Tax.Burden * (Gov.Exp + log_Expenditure_to_GDP + Property.Rights)
+            + Gov.Exp * log_Tax_Burden
+            + log_Tax_Burden * log_Expenditure_to_GDP
+            + log_Expenditure_to_GDP * log_Property
+            
+            , data = data_2016)
+```
+
+```{r, include = FALSE}
+step_cleaned3_2014 <- step(cleaned3_2014)
+
+step_cleaned3_2015 <- step(cleaned3_2015)
+
+step_cleaned3_2016 <- step(cleaned3_2016)
+```
+
+
+```{r,echo=FALSE}
+summary(step_cleaned3_2014)
+summary(step_cleaned3_2015)
+summary(step_cleaned3_2016)
+```
+
+Interactions that occur in all 3 :
+  Tax.Burden * Gov.Exp
+  Tax.Burden * log_Expenditure_to_GDP
+  
+```{r, include=FALSE}
+model_2014 <- lm(transformed_GDP_2014 ~ 
+              Tax.Burden
+               + log_Tax_Burden + log_Expenditure_to_GDP
+               + Property.Rights + Financial.Freedom
+               + log_Property + log_Business + Gov.Exp
+               + Tax.Burden * (Gov.Exp + log_Expenditure_to_GDP)
+            
+            , data = data_2014)
+
+model_2015 <- lm(transformed_GDP_2015 ~ 
+              Tax.Burden
+               + log_Tax_Burden + log_Expenditure_to_GDP
+               + Property.Rights + Financial.Freedom
+               + log_Property + log_Business + Gov.Exp
+               + Tax.Burden * (Gov.Exp + log_Expenditure_to_GDP)
+            
+            , data = data_2015)
+
+model_2016 <- lm(transformed_GDP_2016 ~ 
+              Tax.Burden
+               + log_Tax_Burden + log_Expenditure_to_GDP
+               + Property.Rights + Financial.Freedom
+               + log_Property + log_Business + Gov.Exp
+               + Tax.Burden * (Gov.Exp + log_Expenditure_to_GDP)
+            
+            , data = data_2016)
+
+model <- lm(transformed_GDP ~ 
+              Tax.Burden
+               + log_Tax_Burden + log_Expenditure_to_GDP
+               + Property.Rights + Financial.Freedom
+               + log_Property + log_Business + Gov.Exp
+               + Tax.Burden * (Gov.Exp + log_Expenditure_to_GDP)
+            
+            , data = data)
+              
+```
+
+
+```{r, echo=FALSE}
+# Perform the Breusch-Pagan test
+breusch_pagan_test_2014 <- bptest(model_2014)
+breusch_pagan_test_2015 <- bptest(model_2015)
+breusch_pagan_test_2016 <- bptest(model_2016)
+
+# Print the test results
+print(breusch_pagan_test_2014)
+print(breusch_pagan_test_2015)
+print(breusch_pagan_test_2016)
+```
+
+```{r, echo=FALSE}
+par(mfrow = c(2, 2))
+plot(model_2014)
+plot(model_2015)
+plot(model_2016)
+plot(model)
+```
+
+```{r, echo=FALSE}
+bptest_2014 <- bptest(model_2014)
+bptest_2015 <- bptest(model_2015)
+bptest_2016 <- bptest(model_2016)
+
+print(bptest_2014)
+print(bptest_2015)
+print(bptest_2016)
+```
+
+```{r, echo=FALSE}
+breusch_pagan_test <- bptest(model)
+
+# Print the test results
+print(breusch_pagan_test)
+```
+
+```{r, echo=FALSE}
+summary(model_2014)
+summary(model_2015)
+summary(model_2016)
+```
+
+
+
+```{r, echo=FALSE}
+summary(model)
+```
+
+```{r, echo=FALSE}
+plot <- ggplot(data, aes(x = Tax.Burden, y = GDP.per.capita)) +
+  geom_point() +
+  geom_smooth(method = "loess", se = TRUE) +  # Add a non-linear fit line
+  labs(title = "Scatter Plot with Line of Best Fit for Tax Burden", x = "Tax Burden", y = "GDP per Capita") +
+  theme_minimal()
+
+# Display the plot
+print(plot)
+```
+
+```{r, echo=FALSE}
+plot <- ggplot(data, aes(x = Gov.Exp, y = GDP.per.capita)) +
+  geom_point() +
+  geom_smooth(method = "loess", se = TRUE) +  # Add a non-linear fit line
+  labs(title = "Scatter Plot with Line of Best Fit for Government Expenditure", x = "Government Expenditure to GDP", y = "GDP per Capita") +
+  theme_minimal()
+
+# Display the plot
+print(plot)
+```
+
+```{r, echo=FALSE}
+plot <- ggplot(data, aes(x = Property.Rights, y = GDP.per.capita)) +
+  geom_point() +
+  geom_smooth(method = "loess", se = TRUE) +  # Add a non-linear fit line
+  labs(title = "Scatter Plot with Line of Best Fit for Property Rights", x = "Property Rights", y = "GDP per Capita") +
+  theme_minimal()
+
+# Display the plot
+print(plot)
+```
+
+```{r, echo=FALSE}
+plot <- ggplot(data, aes(x = Financial.Freedom, y = GDP.per.capita)) +
+  geom_point() +
+  geom_smooth(method = "loess", se = TRUE) +  # Add a non-linear fit line
+  labs(title = "Scatter Plot with Line of Best Fit for Financial.Freedom", x = "Financial Freedom", y = "GDP per Capita") +
+  theme_minimal()
+
+# Display the plot
+print(plot)
+```
+
+```{r, echo=FALSE}
+plot <- ggplot(data, aes(x = Business.Freedom, y = GDP.per.capita)) +
+  geom_point() +
+  geom_smooth(method = "loess", se = TRUE) +  # Add a non-linear fit line
+  labs(title = "Scatter Plot with Line of Best Fit for Business Freedom", x = "Business Freedom", y = "GDP per Capita") +
+  theme_minimal()
+
+# Display the plot
+print(plot)
+```
+
+```{r, echo=FALSE}
+# Define your function
+my_function <- function(x) {
+  return (exp((log(0.4 * (x)) + 1) / 0.4))
+}
+
+# Generate x values in the desired range
+x_values <- seq(0,300, by = 1)
+
+# Calculate corresponding y values using your function
+y_values <- my_function(x_values)
+line_plot <- ggplot() +
+  geom_line(aes(x = x_values, y = y_values), color = "blue", size = 2) +
+  labs(title = "Effect of Transformation",
+       x = "Transformed GDP",
+       y = "GDP per Capita") +
+  scale_x_continuous(labels = scales::dollar_format(scale = 1e+0, prefix = "")) +  # Format x-axis labels as dollars in thousands
+  scale_y_continuous(labels = scales::dollar_format(scale = 1e-4, suffix = ",000")) +   # Format y-axis labels as dollars in thousands
+  theme_minimal()
+
+
+print(line_plot)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r, include=FALSE}
+model_Property <- lm(transformed_GDP ~ Property.Rights + log_Property, data=data)
+
+summary(model_Property)
+```
+Get range for variable Property Rights
+```{r, echo=FALSE}
+summary(data$Property.Rights)
+```
+
+
+
+
+
+
+```{r, echo=FALSE}
+# Define your function
+my_function <- function(x) {
+  return (exp((log(0.4 * (122.1240 + 2.1317 * x -31.3422 * log(x))) + 1) / 0.4))
+}
+
+# Generate x values in the desired range
+x_values <- seq(5,95, by = 1)
+
+# Calculate corresponding y values using your function
+y_values <- my_function(x_values)
+line_plot <- ggplot() +
+  geom_line(aes(x = x_values, y = y_values), color = "blue", size = 2) +
+  labs(title = "Model of Property Rights vs GDP per Capita",
+       x = "Property Rights",
+       y = "GDP per Capita") +
+  scale_x_continuous(labels = scales::dollar_format(scale = 1e+0, prefix = "")) +  # Format x-axis labels as dollars in thousands
+  scale_y_continuous(labels = scales::dollar_format(scale = 1e-4, suffix = ",000")) +   # Format y-axis labels as dollars in thousands
+  theme_minimal()
+
+
+print(line_plot)
+```
+
+Ideal Property Rights = 95
+
+```{r, include=FALSE}
+model_Financial <- lm(transformed_GDP ~ Financial.Freedom + log_Financial, data=data)
+
+summary(model_Financial)
+```
+Get range for variable Financial Freedom
+```{r}
+summary(data$Financial.Freedom)
+```
+
+
+```{r, echo=FALSE}
+# Define your function
+my_function <- function(x) {
+  return (exp((log(0.4 * (235.6449 + 3.3546 * x -78.7260 * log(x))) + 1) / 0.4))
+}
+
+# Generate x values in the desired range
+x_values <- seq(10,90, by = 1)
+
+# Calculate corresponding y values using your function
+y_values <- my_function(x_values)
+line_plot <- ggplot() +
+  geom_line(aes(x = x_values, y = y_values), color = "blue", size = 2) +
+  labs(title = "Model of Financial Freedom vs GDP per Capita",
+       x = "Financial Freedom",
+       y = "GDP per Capita") +
+  scale_x_continuous(labels = scales::dollar_format(scale = 1e+0, prefix = "")) +  # Format x-axis labels as dollars in thousands
+  scale_y_continuous(labels = scales::dollar_format(scale = 1e-4, suffix = ",000")) +   # Format y-axis labels as dollars in thousands
+  theme_minimal()
+
+
+print(line_plot)
+```
+
+
+
+```{r, include=FALSE}
+model_business <- lm(transformed_GDP ~ log_Business, data=data)
+
+summary(model_business)
+```
+
+
+Range of Business Freedom variable
+
+```{r, echo=FALSE}
+summary(data$Business.Freedom)
+```
+
+
+```{r, echo=FALSE}
+# Define your function
+my_function <- function(x) {
+  return (exp((log(0.4 * (-396.170 + 119.916 * log(x))) + 1) / 0.4))
+}
+
+# Generate x values in the desired range
+x_values <- seq(27,100, by = 1)
+
+# Calculate corresponding y values using your function
+y_values <- my_function(x_values)
+
+line_plot <- ggplot() +
+  geom_line(aes(x = x_values, y = y_values), color = "blue", size = 2) +
+  labs(title = "Model of Business Freedom vs GDP per Capita",
+       x = "Business Freedom",
+       y = "GDP per Capita") +
+  scale_x_continuous(labels = scales::dollar_format(scale = 1e+0, prefix = "")) +  # Format x-axis labels as dollars in thousands
+  scale_y_continuous(labels = scales::dollar_format(scale = 1e-4, suffix = ",000")) +   # Format y-axis labels as dollars in thousands
+  theme_minimal()
+
+print(line_plot)
+```
+
+
+```{r, include=FALSE}
+model_Tax_Gov <- lm(transformed_GDP ~ Tax.Burden * (Gov.Exp + log_Expenditure_to_GDP)
+                  + log_Tax_Burden ,data = data)
+```
+
+```{r, include=TRUE}
+summary(model_Tax_Gov)
+```
+Range of explanatory variables Tax.Burden and Gov.Exp
+```{r, echo=FALSE}
+summary(data$Tax.Burden)
+summary(data$Gov.Exp)
+```
+
+```{r, echo=FALSE}
+# Define the function with three variables
+my_function <- function(x,y) {
+  return (exp((log(0.4 * (382.91470 - 11.69437 * x - 55.24662 * log(x)
+                          + 5.07288 * y - 113.40419 * log(y)
+                          - 0.24097 * x * y + 7.12424 * x * log(y))) + 1) / 0.4))
+}
+
+# Generate a grid of x and y values
+x_values <- seq(5, 50, length.out = 1000)
+y_values <- seq(12.7, 63.1, length.out = 1000)
+
+# Create a meshgrid of x and y values
+grid <- expand.grid(x = x_values, y = y_values)
+
+# Calculate z values for each combination of x and y
+grid$`GDP per capita (PPP)` <- my_function(grid$x, grid$y)
+
+# Set z-values less than 0 to NA
+grid$`GDP per capita (PPP)`[grid$`GDP per capita (PPP)` < 0] <- NA
+
+# Create filled contour plot using geom_raster
+filled_contour_plot <- ggplot(grid, aes(x = x, y = y, fill = `GDP per capita (PPP)`)) +
+  geom_raster() +
+  scale_fill_gradient(low = "white", high = "black", na.value = "red", labels = scales::dollar_format(scale = 1e-4, suffix = ",000")) +  # Format labels as dollars in thousands) +  # Set color for NA values to white
+  labs(title = "Heat map of Government Expenditure to Tax Burden",
+       x = "Tax Burden",
+       y = "Government Expenditure") +
+  coord_cartesian(xlim = c(5, 50), ylim = c(12.7,63.1))
+
+# Show the filled contour plot
+print(filled_contour_plot)
+```
+
+From the heatmap, we can see that a GDP is highest at the minimum of Tax Burden (50)
+GDP is maximised when government expenditure is in the range 30,40
+
+```{r, echo=FALSE}
+# Define your function
+y = 48.6 # Tax Burden
+
+my_function <- function(x) {
+  return (exp((log(0.4 * (382.91470 - 11.69437 * y - 55.24662 * log(y)
+                          + 5.07288 * x - 113.40419 * log(x)
+                          - 0.24097 * x * y + 7.12424 * y * log(x))) + 1) / 0.4))
+}
+
+# Generate x values in the desired range
+x_values <- seq(12.7,63.1, by = 1)
+
+# Calculate corresponding y values using your function
+y_values <- my_function(x_values)
+
+line_plot <- ggplot() +
+  geom_line(aes(x = x_values, y = y_values), color = "blue", size = 2) +
+  labs(title = "Model of Government Spending vs GDP per Capita, given Tax.Burden = 48.6",
+       x = "Governemt Spending",
+       y = "GDP per Capita") +
+  scale_x_continuous(labels = scales::dollar_format(scale = 1e+0, suffix = "%",prefix = "")) +  # Format x-axis labels as dollars in thousands
+  scale_y_continuous(labels = scales::dollar_format(scale = 1e-4, suffix = ",000")) +   # Format y-axis labels as dollars in thousands
+  theme_minimal()
+
+print(line_plot)
+```
+
+We can see that increasing the Tax burden decreased GDP per capita
+
+```{r, echo=FALSE}
+# Define your function
+y = 35 # Gov Spending
+
+my_function <- function(x) {
+  return (exp((log(0.4 * (641.6183 - 9.3164 * y - 61.1608 * log(y)
+                          + 7.5456 * x - 176.9241 * log(x)
+                          - 0.2644 * y * y + 6.3510 * y * log(x))) + 1) / 0.4))
+}
+
+# Generate x values in the desired range
+x_values <- seq(12.9,55.54, by = 1)
+
+# Calculate corresponding y values using your function
+y_values <- my_function(x_values)
+
+line_plot <- ggplot() +
+  geom_line(aes(x = x_values, y = y_values), color = "blue", size = 2) +
+  labs(title = "Model Tax Burden vs GDP per Capita",
+       x = "Tax Burden",
+       y = "GDP per Capita") +
+  scale_x_continuous(labels = scales::dollar_format(scale = 1e+0, prefix = "")) +  # Format x-axis labels as dollars in thousands
+  scale_y_continuous(labels = scales::dollar_format(scale = 1e-4, suffix = ",000")) +   # Format y-axis labels as dollars in thousands
+  theme_minimal()
+
+print(line_plot)
+```
+
+```{r, include=FALSE}
+nboot=1000
+bres=matrix(NA,nrow = nboot,
+            ncol = length(coef(model)),
+           dimnames = list(rep=seq(nboot),
+                           coef=names(coef(model))))
+set.seed(20357161)
+bootsize=1000
+for (i in seq(nboot)) {
+  bdat=data[sample(nrow(data),size=bootsize,replace=TRUE),]
+  bfit=update(model,data=bdat)
+  
+ bres[i,]=coef(bfit)
+  
+}
+
+
+bootstrapCI= data.frame(mean_est=colMeans(bres),
+       t(apply(bres,2,quantile,c(0.025,0.975))))
+```
+
+
+```{r, include=FALSE}
+boot_result <- cbind(model_Coef=coef(model),Bootstrap=bootstrapCI)
+```
+
+
+```{r, include=TRUE}
+print(boot_result)
+```
+
+
+```{r}
+write.csv(boot_result, file = "bootstrap_results2.csv", row.names = FALSE)
+```
+
+
+
+
+```{r, echo=FALSE}
+subset_data <- df[, c( "transformed_GDP", "Gov.Exp", "log_Expenditure_to_GDP", "Tax.Burden", "log_Tax_Burden",
+  "Financial.Freedom", "Property.Rights", "log_Property", "log_Business"
+)]
+
+# Calculate the correlation matrix
+correlation_matrix <- cor(subset_data)
+
+# Extract correlation values for 'y' with each variable
+cor_data <- correlation_matrix["transformed_GDP", ]
+
+# Print the correlation values
+print(cor_data)
+```
+
+```{r}
+summary(subset_data)
+```
+
+
+
+
+
+
+```{r, echo=FALSE}
+corrplot(correlation_matrix, method = "color", type = "upper", order = "hclust", tl.cex = 1, tl.col = "black")
+```
+```{r}
+plot(model_2014)
+plot(model_2015)
+plot(model_2016)
+plot(model)
+```
+
+```{r, echo=FALSE}
+suppressWarnings(
+chart.Correlation(subset_data, histogram=TRUE, pch=2)
+)
+```
+
+
+```{r}
+library(knitr)
+library(kableExtra)
+```
+
+```{r}
+numeric_data <- select_if(data, is.numeric)
+
+correlation_var1 <- cor(numeric_data$transformed_GDP ,numeric_data[, -1])
+
+correlation_matrix_transposed <- t(correlation_var1)
+
+correlation_table <- kable(correlation_matrix_transposed, format = "html", digits = 2, caption = "Correlation Matrix")
+
+# Add some styling using kableExtra
+correlation_table <- correlation_table %>%
+  kable_styling(full_width = FALSE)
+
+# Print the table
+print(correlation_table)
+```
+
+```{r}
+summary(cleaned_2014)
+```
+
+```{r}
+summary(step_cleaned_2014)
+```
+
+```{r}
+summary(cleaned2_2014)
+```
+
+```{r}
+summary(step_cleaned2_2014)
+```
+
+```{r}
+summary(cleaned3_2014)
+```
+
+```{r}
+summary(step_cleaned3_2014)
+```
+
+```{r}
+AIC_1 <- AIC(cleaned_2014)
+AIC_2 <- AIC(step_cleaned_2014)
+AIC_3 <- AIC(cleaned2_2014)
+AIC_4 <- AIC(step_cleaned2_2014)
+AIC_5 <- AIC(cleaned3_2014)
+AIC_6 <- AIC(step_cleaned3_2014)
+
+print(AIC_1)
+print(AIC_2)
+print(AIC_3)
+print(AIC_4)
+print(AIC_5)
+print(AIC_6)
+```
+```{r}
+AIC_1 <- AIC(cleaned_2015)
+AIC_2 <- AIC(step_cleaned_2015)
+AIC_3 <- AIC(cleaned2_2015)
+AIC_4 <- AIC(step_cleaned2_2015)
+AIC_5 <- AIC(cleaned3_2015)
+AIC_6 <- AIC(step_cleaned3_2015)
+
+print(AIC_1)
+print(AIC_2)
+print(AIC_3)
+print(AIC_4)
+print(AIC_5)
+print(AIC_6)
+```
+
+```{r}
+AIC_1 <- AIC(cleaned_2016)
+AIC_2 <- AIC(step_cleaned_2016)
+AIC_3 <- AIC(cleaned2_2016)
+AIC_4 <- AIC(step_cleaned2_2016)
+AIC_5 <- AIC(cleaned3_2016)
+AIC_6 <- AIC(step_cleaned3_2016)
+
+print(AIC_1)
+print(AIC_2)
+print(AIC_3)
+print(AIC_4)
+print(AIC_5)
+print(AIC_6)
+```
+
+```{r}
+# Sample data
+x <- 1:6
+y1 <- c(1225.612, 1210.714, 1227.454, 1199.918, 1205.91, 1202.644)
+y2 <- c(1329.509, 1311.092, 1329.704, 1299.015, 1309.219, 1303.962)
+y3 <- c(1368.419, 1352.813, 1369.089, 1340.981, 1343.184, 1340.449)
+
+# Plotting the first line
+plot(x, y1, type = "l", col = "blue", lty = 1, lwd = 3, ylim = range(c(y1, y2, y3)), xlab = "Model Iteration", ylab = "AIC of models", main = "AIC evolution of models")
+
+# Adding lines for the other two variables
+lines(x, y2, col = "green", lty = 2, lwd = 3)
+lines(x, y3, col = "red", lty = 3, lwd = 3)
+
+# Adding legend
+legend("left", legend = c("2014 data", "2015 data", "2016 data"), col = c("blue", "green", "red"), lty = 1:3, cex= 0.8)
+
+```
+
+```{r}
+boxplot(data$GDP.per.capita,          # Specify the column you want to plot
+        main = "GDP Boxplot",  # Main title of the plot
+        xlab = "GDP Values",   # X-axis label
+        col = "skyblue",        # Color of the boxplot
+        border = "black",       # Border color of the boxplot
+        horizontal = TRUE     # Set to TRUE for a horizontal boxplot
+)
+```
+
+
+
+```{r}
+residuals_vs_fitted <- plot(model, which = 1, main = "Residuals vs Fitted")
+
+# Create scale location plot
+scale_location <- plot(model, which = 3, main = "Scale Location")
+
+# Set up a layout with two plots side by side
+par(mfrow = c(1, 2))
+
+# Plot the residual vs fitted and scale location plots side by side
+plot(model, which = 1, main = "Residuals vs Fitted")
+plot(model, which = 3, main = "Scale Location")
+```
+
+```{r}
+par(mfrow = c(2, 2))
+plot(model)
+```
+
+
+```{r}
+DNbuilder(model, data = data, m.summary="formatted", covariate = "numeric", DNtitle = "Transformed GDP to different Governemt Spending levels", DNxlab = "Transformed GDP", DNylab = "Spending to GDP increasing by 5%", clevel = 0.95)
+```
+
+```{r, eval=FALSE}
+setwd("C:/Users/chris/OneDrive/Desktop/NUIG/Year 4/FYP/DynNomapp")
+shiny::runApp()
+```
+
+```{r}
+summary(model)
+```
+
+
+
